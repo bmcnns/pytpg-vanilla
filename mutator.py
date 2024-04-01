@@ -31,25 +31,32 @@ class Mutator:
 		originalHash: int = hash(instruction)
 		
 		if mutatedPart == "ADDRESSING_MODE":
-			instruction.mode = random.choice(["INPUT", "REGISTERS"])
+			instruction.mode = random.choice(["INPUT", "REGISTERS", "MEMORY"])
 
 			# ensure that the registers remain within bounds
 			if instruction.mode == "INPUT" and instruction.source > Parameters.NUM_OBSERVATIONS - 1:
 				instruction.source = instruction.source % Parameters.NUM_OBSERVATIONS
 			elif instruction.mode == "REGISTERS" and instruction.source > Parameters.NUM_REGISTERS - 1:
 				instruction.source = instruction.source % Parameters.NUM_REGISTERS
+			elif instruction.mode == "MEMORY" and instruction.source > Parameters.MEMORY_SIZE - 1:
+				instruction.source = instruction.source % Parameters.MEMORY_SIZE
 				
 		elif mutatedPart == "OPERATION":
-			instruction.operation = random.choice(['+', '-', '*', '/', 'COS', 'NEGATE'])
+			instruction.operation = random.choice(['+', '-', '*', "=", '/', 'COS', 'NEGATE', 'NONE'])
 
 		elif mutatedPart == "SOURCE REGISTER":
 			if instruction.mode == "INPUT":
 				instruction.source = random.randint(0, Parameters.NUM_OBSERVATIONS - 1)
 			elif instruction.mode == "REGISTERS":
 				instruction.source = random.randint(0, Parameters.NUM_REGISTERS - 1)
+			elif instruction.mode == "MEMORY":
+				instruction.source = random.randint(0, Parameters.MEMORY_SIZE - 1)
 
 		elif mutatedPart == "DESTINATION REGISTER":
-			instruction.destination = random.randint(0, Parameters.NUM_REGISTERS - 1) 
+			if instruction.updateMemory:
+				instruction.destination = random.randint(0, Parameters.MEMORY_SIZE - 1) 
+			else:
+				instruction.destination = random.randint(0, Parameters.NUM_REGISTERS - 1) 
 			
 		newHash: int = hash(instruction)
 		
@@ -146,8 +153,13 @@ class Mutator:
 							team.programs.append(newProgram)
 
 		# delete a program
+		numAtomicActions: int = 0
+		for program in team.programs:
+			if type(program.action.value) is Instruction:
+				numAtomicActions += 1
+
 		if random.random() < Parameters.DELETE_PROGRAM_PROBABILITY:
-			if len(team.programs) > 1:
+			if numAtomicActions > 2:
 				team.programs.remove(random.choice(team.programs))
 				
 		# create a new program
@@ -168,7 +180,7 @@ class Mutator:
 
 			numAtomicActions: int = 0
 			for program in team.programs:
-				if program.action.value in Parameters.ACTIONS:
+				if type(program.action.value) is Instruction:
 					numAtomicActions += 1
 
 			# A team must have at least one atomic action!
@@ -185,4 +197,4 @@ class Mutator:
 				#		if str(t.id) == program.action.value:
 							#t.referenceCount -= 1
 							
-				program.action = Action(random.choice(Parameters.ACTIONS))
+				program.action = Action(Instruction(isForcedMemoryInstruction=True))

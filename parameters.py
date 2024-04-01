@@ -82,5 +82,22 @@ class Parameters:
 
 	#: On rampant mutation rounds, apply N rounds of mutation. 
 	RAMPANT_MUTATION_COUNT: int = 10
+
+	#: The number of registers in our global state memory
+	MEMORY_SIZE: int = 9
+
+	#: The gamma value used for the Q-Learner (the balance of short-term and long-term motivation)
+	QLEARNER_GAMMA: float =  0.85
+
+	QLEARNER_LEARNING_RATE: float = 0.001
+
+	#: X% of the time, the q-learner will try a random action to balance exploration-exploitation
+	QLEARNER_EPSILON: float = 0.15
+
+	SAVE_VIDEO: bool = True
+
+	SAVE_VIDEO_AFTER_X_GENERATIONS: int = 40
 	
-	
+	IS_EVALUATION: bool = False
+
+	EPISODES: int = 1

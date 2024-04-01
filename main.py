@@ -43,6 +43,7 @@ def main():
 	# If specified, load a previously trained model
 	if args.model == None:
 		model = Model()
+
 	else:
 		model = Model.load(f"{args.model}")
 

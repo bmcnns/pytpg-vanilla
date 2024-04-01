@@ -35,7 +35,7 @@ class GymEnvironment():
 		if environment == "CarRacing-v2":
 			self.gym = gym.make(environment, render_mode='rgb_array', domain_randomize=False, continuous=False)
 		else:
-			self.gym = gym.make(environment, render_mode='rgb_array', continuous=False)
+			self.gym = gym.make(environment, render_mode='rgb_array')
 
 		self.environment = environment
 		self.actions = actions

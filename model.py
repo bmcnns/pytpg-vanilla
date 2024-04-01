@@ -4,7 +4,11 @@ from team import Team
 from mutator import Mutator
 from parameters import Parameters
 from statistics import Statistics
-from diversity import Diversity
+from copy import deepcopy
+from memory import Memory
+from qlearner import QLearner
+
+#from diversity import Diversity
 
 
 import pickle
@@ -25,8 +29,10 @@ class Model:
 	def __init__(self):
 
 		self.id = str(uuid4())
-		self.statistics = Statistics()
 
+		
+		self.statistics = Statistics()
+		
 		#: The pool of available (competitive) programs 
 		self.programPopulation: List[Program] = [ Program() for _ in range(Parameters.INITIAL_PROGRAM_POPULATION)]
 
@@ -57,35 +63,72 @@ class Model:
 		:param numGenerations: The number of generations to train the model for.
 		:param maxStepsPerGeneration: How many actions the agent can make before time-out.
 		"""
+
 		for generation in range(startingGeneration, startingGeneration + numGenerations + 1):
 			for teamNum, team in enumerate(self.getRootTeams()):
+				#team.qlearner = QLearner(Parameters.MEMORY_SIZE,
+				#						 len(Parameters.ACTIONS),
+				#						 Parameters.QLEARNER_GAMMA,
+				#						 Parameters.QLEARNER_LEARNING_RATE)
 
-				state = environment.reset()
-				score = 0
-				step = 0
+				episodicRewards = np.zeros(Parameters.EPISODES)
+				episodeStep = 0
 
-				while True:
-					action = team.getAction(self.teamPopulation, state, visited=[])
+				#team.memory = np.random.normal(0, 1, Parameters.MEMORY_SIZE)
+								
+				for episode in range(Parameters.EPISODES):
+					state = environment.reset()
+
 					
-					state, reward, finished = environment.step(action)
-					Diversity.updateCache(state)
+					score = 0
+					step = 0
 
-					score += reward
-					step += 1
+					while True:
+						registers, instruction = team.getAction(self.teamPopulation, state, visited=[])
 
-					# If the team did well previously, record a video of its performance
-					#if team.luckyBreaks > 0:
-					#	self.statistics.save(environment, generation, team, self.teamPopulation, step, score)
+						# get the memory before being modified by the genetic algorithm
+						previousMemoryState = deepcopy(team.memory)
 
-					if finished or step == maxStepsPerGeneration:
-						break
+						# use the q-learner to choose an action
+						action = team.qlearner.predict(previousMemoryState).argmax()
 
-				
-				team.scores.append(score)
+						if not Parameters.IS_EVALUATION and random.random() < Parameters.QLEARNER_EPSILON:
+							action = random.randint(0, len(Parameters.ACTIONS) - 1)
 
+						# update the memory using the genetic algorithm
+						instruction.execute(team.memory, state, registers)
+
+						team.qlearner.predict(team.memory)
+
+						# get the reward and new state after using the q-learner's chosen action
+						state, reward, finished = environment.step(Parameters.ACTIONS[action])
+
+						# get the memory after being modified by the genetic algorithm
+						newMemoryState = deepcopy(team.memory)
+
+						# update the q-values
+						team.qlearner.train(previousMemoryState, newMemoryState, reward, action)
+
+						score += reward
+						step += 1
+						episodeStep += 1
+						
+						# If the team did well previously, record a video of its performance
+
+						if Parameters.SAVE_VIDEO:
+							if generation % Parameters.SAVE_VIDEO_AFTER_X_GENERATIONS == 0:
+								if team.luckyBreaks > 0:
+									self.statistics.save(environment, generation, team, self.teamPopulation, episodeStep, score)
+
+						if finished or step == maxStepsPerGeneration:
+							break
+
+					episodicRewards[episode] = score
+					#print(f"Episode completed with score: {score}")
+					
+				team.scores.append(np.median(episodicRewards))
 				print(f"Generation #{generation} Team #{teamNum + 1} ({team.id})")
-				print(f"Team finished with score: {score}, score*: {team.getFitness()}")
-
+				print(f"Team finished with score: {np.median(episodicRewards)}, fitness: {team.getFitness()}")
 
 			print("\nGeneration complete.\n")
 
@@ -148,21 +191,14 @@ class Model:
 		while len(self.getRootTeams()) < Parameters.POPULATION_SIZE:
 			team = random.choice(self.getRootTeams()).copy()
 
-			mutationCount = 1
-
-			if generation % Parameters.RAMPANT_MUTATION_INTERVAL == 0:
-				print("\nRAMPANT MUTATION ROUND\n")
-				mutationCount = Parameters.RAMPANT_MUTATION_COUNT
-				
-			for i in range(1):
-				Mutator.mutateTeam(self.programPopulation, self.teamPopulation, team)
+			Mutator.mutateTeam(self.programPopulation, self.teamPopulation, team)
 			
-			profile = Diversity.getProfile(self.teamPopulation, team)
-			while profile in Diversity.profiles:
-				Mutator.mutateTeam(self.programPopulation, self.teamPopulation, team)
-				profile = Diversity.getProfile(self.teamPopulation, team)
+			#profile = Diversity.getProfile(self.teamPopulation, team)
+			#while profile in Diversity.profiles:
+			#	Mutator.mutateTeam(self.programPopulation, self.teamPopulation, team)
+			#	profile = Diversity.getProfile(self.teamPopulation, team)
 				
-			Diversity.profiles.append(profile)
+			#Diversity.profiles.append(profile)
 
 			self.teamPopulation.append(team)
 

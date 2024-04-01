@@ -1,14 +1,14 @@
 from program import Program
 from parameters import Parameters
+from memory import Memory
+from team import Team
+from instruction import Instruction
 
 from typing import List
 import networkx as nx
 from networkx.drawing.nx_agraph import graphviz_layout
-
 import matplotlib.pyplot as plt
-
-from team import Team
-
+import numpy as np
 import math
 import uuid
 
@@ -37,28 +37,21 @@ class Debugger:
 
 			for program in team.programs:
 				# Add program as a node with custom shape and different color
-				
-				if program.action.value in Parameters.ACTIONS:
+				if type(program.action.value) is Instruction:
 					if program.action.id in team.policy:
-						programNodeColour = "red"
+						G.add_node(program.id, shape='{}', color="red", node_type='program')
 					else:
-						programNodeColour = "lightgray"
-						
-					G.add_node(program.id, shape='{}', color=programNodeColour, node_type='program')
-					
+						G.add_node(program.id, shape='{}', color="lightgray", node_type='program')
+
 					actionId: str = str(uuid.uuid4())
 					G.add_edge(team.id, program.id) 
-					G.add_node(actionId, color='white', node_type='action', label=program.action.value)
+					G.add_node(actionId, color='white', node_type='action', label=str(program.action.value))
 					G.add_edge(program.id, actionId)
 				else:
 					for childTeam in teamPopulation:
 						if program.action.value != team.id and childTeam.id == str(program.action.value) and str(childTeam.id) not in visited:
 							actionId: str = str(uuid.uuid4())
-							print(str(childTeam.id), " ", program.action.value, " ", str(childTeam.id) == str(program.action.value))
-							#G.add_edge(team.id, program.id, label="BRYCEBRYCEBRYCE", color='red', linewidth=2.5)  # Connect team to referenced team
-
 							G.add_node(actionId, shape='{}', color='lightgray', node_type='program')
-							#G.add_node(actionId, color='white', node_type='action', label=program.id)
 							G.add_edge(actionId, childTeam.id)
 							G.add_edge(team.id, actionId)
 							process_team(childTeam)
@@ -70,6 +63,7 @@ class Debugger:
 		pos = graphviz_layout(G, prog='neato')
 
 		labels = nx.get_edge_attributes(G, 'label')
+
 		node_colors = [G.nodes[node]['color'] for node in G.nodes]
 		edge_colors = [G.nodes[node]['edgecolor'] if G.nodes[node]['node_type'] == 'team' else 'none' for node in G.nodes]
 		linewidths = [G.nodes[node]['linewidth'] if G.nodes[node]['node_type'] == 'team' else 0 for node in G.nodes]
@@ -95,3 +89,20 @@ class Debugger:
 		program_nodes = [node for node in G.nodes if G.nodes[node]['node_type'] == 'program']
 		for program_node in program_nodes:
 			ax.text(pos[program_node][0], pos[program_node][1], G.nodes[program_node]['shape'], ha='center', va='center', color='black', size=8)
+
+	@staticmethod
+	def plotMemory(team: Team, ax) -> None:
+		# Reshape the list into a square matrix
+		size = int(len(team.memory) ** 0.5)
+		matrix = np.array(team.memory).reshape((size, size))
+
+		# Round the floats to two decimal places
+		matrix_rounded = np.round(matrix, decimals=5)
+
+		# Plot the matrix
+		ax.matshow(matrix_rounded, cmap='viridis')
+
+		# Add text annotations
+		for i in range(size):
+			for j in range(size):
+				ax.text(j, i, str(matrix_rounded[i, j]), va='center', ha='center')

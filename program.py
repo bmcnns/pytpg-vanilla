@@ -19,7 +19,7 @@ class Program:
 		self.registers: np.array = np.zeros(Parameters.NUM_REGISTERS)
 
 		#: A program is assigned a random action when created.
-		self.action: Action = Action(random.choice(Parameters.ACTIONS))
+		self.action: Action = Action(Instruction(isForcedMemoryInstruction=True))
 
 		#: A list of randomly generated instructions varying in size from 1 to MAX_INSTRUCTION_COUNT.
 		self.instructions: List[Instruction] = []
@@ -49,16 +49,16 @@ class Program:
 		"""
 		return hash(str(self))
 	
-	def execute(self, state: np.array) -> None:
+	def execute(self, memory: List[float], state: np.array) -> None:
 		"""
 		Execute all of the program's instructions sequentially
 
 		:param state: The feature vector representing the state/observation from the environment.
 		""" 
 		for instruction in self.instructions:
-			instruction.execute(state, self.registers)
+			instruction.execute(memory, state, self.registers)
 
-	def bid(self, state: np.array) -> Dict[float, str]:
+	def bid(self, memory: List[float], state: np.array) -> Dict[float, str]:
 		"""
 		Produces a bid which consists of an action and a confidence value of how
 		certain the program is that the action is correct.
@@ -71,7 +71,7 @@ class Program:
 
 		:return: A dictionary containing a confidence value and a suggested action.
 		"""
-		self.execute(state)
+		self.execute(memory, state)
 		
 		return {
 			"confidence": self.registers[0],

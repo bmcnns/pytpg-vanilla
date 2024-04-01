@@ -8,6 +8,7 @@ from matplotlib.axes import Axes
 
 import os
 
+
 class Statistics:
 	
 	reward_df = pd.DataFrame()
@@ -39,10 +40,11 @@ class Statistics:
 		ax.set_title('Cumulative rewards of teams over time')
 
 	def save(self, environment: Environment, generation, team, teamPopulation, step, reward):
-		fig, axs = plt.subplots(1, 2, figsize=(10,8))
+		fig, axs = plt.subplots(3, 1, figsize=(10,8))
 		axs = axs.flatten()
 		environment.display(axs[0], generation, team, step, reward)
 		Debugger.plotTeam(team, teamPopulation, axs[1])
+		Debugger.plotMemory(team, axs[2])
 
 		filename = f"bin/recordings/{team.id}/{generation}/{step}.png"
 		os.makedirs(os.path.dirname(filename), exist_ok=True)

@@ -7,6 +7,8 @@ from typing import List
 from copy import deepcopy
 from parameters import Parameters
 from action import Action
+from instruction import Instruction
+from qlearner import QLearner
 
 import numpy as np
 
@@ -23,6 +25,13 @@ class Team:
 		#: The unique identifier for the team
 		self.id: str = str(uuid4())
 
+		self.memory: List[float] = np.random.normal(0, 1, Parameters.MEMORY_SIZE)#[0.0] * Parameters.MEMORY_SIZE
+
+		self.qlearner = QLearner(numStates=Parameters.MEMORY_SIZE,
+								 numActions=len(Parameters.ACTIONS),
+								 gamma=Parameters.QLEARNER_GAMMA,
+								 learningRate=Parameters.QLEARNER_LEARNING_RATE)
+
 		#: The cumulative rewards assigned to the team for each generation
 		self.scores: List[float] = []
 
@@ -31,10 +40,13 @@ class Team:
 
 		actions: List[Action] = []
 
+		self.policy = []
+
+		self.rootTeam = None
+		
 		self.referenceCount: int = 0
 
 		# reset every time getAction() is called
-		self.policy: List[Action] = []
 		self.luckyBreaks: int = 0
 		"""
 		This is a method of keeping elites. If a team is top-performing in a round, it is awarded a lucky break.
@@ -50,7 +62,7 @@ class Team:
 			actions: List[Action] = [ program.action for program in self.programs] 
 
 	# Choose the program with the highest confidence
-	def getAction(self, teamPopulation: List['Team'], state: np.array, visited: List[str] = []) -> str:
+	def getAction(self, teamPopulation: List['Team'], state: np.array, visited: List[str]) -> str:
 		"""
 		Returns the team's suggested action by choosing the action of the highest-bidding program.
 		If the highest-bidding program is a reference to another team, recurse until the action is atomic.
@@ -62,25 +74,27 @@ class Team:
 
 		:return: an atomic action
 		"""
-
-		# First time getAction is called, reset the policy
-		self.policy = []
-
-		visited.append(self)
+		visited.append(self.id)
 		
-		sortedPrograms = sorted(self.programs, key=lambda program: program.bid(state)['confidence'])
+		sortedPrograms = sorted(self.programs, key=lambda program: program.bid(self.memory, state)['confidence'])
+
+		self.policy = []
 		
 		for program in sortedPrograms:
-			if program.action.value in Parameters.ACTIONS:
+			if type(program.action.value) is Instruction:
 				if program.action == None:
 					raise RuntimeError("A NONE ACTION WAS ENCOUNTERED HERE")
+
 				self.policy.append(program.action.id)
-				return program.action.value
+				return [ program.registers, program.action.value ]#.action.value
 			else:
 				for team in teamPopulation:
 					if str(team.id) == program.action.value:
-						self.policy.append(program.action.id)
-						return team.getAction(teamPopulation, state, visited)
+						if str(team.id) not in visited:
+							return team.getAction(teamPopulation, state, visited)
+						else:
+							raise RuntimeException("CYCLE")
+							
 				raise RuntimeError(f"Team {self.id, type(self.id)} points to team {program.action.value, type(program.action.value)}, and that team does not exist within the population.")
 
 	def getFitness(self):
@@ -109,6 +123,8 @@ class Team:
 		:return: A new team with identical behaviour to the team that was cloned.
 		"""
 		clone: 'Team' = deepcopy(self)
+		clone.qlearner = self.qlearner.copy()
+		clone.memory = deepcopy(self.memory)
 		clone.programs = []
 
 		for program in self.programs:

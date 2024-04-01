@@ -2,21 +2,24 @@ import random
 import numpy as np
 import math
 from parameters import Parameters
+from memory import Memory
+from typing import List
 
 class Instruction:
-	def __init__(self): 
+	def __init__(self, isForcedMemoryInstruction=False): 
 		"""
 		An instruction defines an operation on a program's registers.
 		An instruction may be an addition, subtraction, multiplication, division, cosine, or negation.
 		
+		:param forceMemoryInstruction: Should this Instruction be forced to modify external memory (used for actions)
 		:return: A new instruction
 		"""
 
-		#: Defines whether the instruction should read from (program registers or the state/observation space).
-		self.mode: str = random.choice(["INPUT", "REGISTERS"])
+		#: Defines whether the instruction should read from (program registers, external state memory, or state/observation space).
+		self.mode: str = random.choice(["INPUT", "REGISTERS", "MEMORY"])
 
 		#: Defines what operation the instruction should execute.
-		self.operation: str = random.choice(['+', '-', '*', '/', 'COS', 'NEGATE'])
+		self.operation: str = random.choice(['+', '-', '*', '/', '=', 'COS', 'NEGATE', 'NONE' ])
 		
 		#: The register that the instruction takes as input.
 		self.source: int
@@ -25,9 +28,23 @@ class Instruction:
 			self.source = random.randint(0, Parameters.NUM_OBSERVATIONS - 1)
 		elif self.mode == "REGISTERS":
 			self.source: int = random.randint(0, Parameters.NUM_REGISTERS - 1)
-			
+		elif self.mode == "MEMORY":
+			self.source: int = random.randint(0, Parameters.MEMORY_SIZE - 1)
+
 		#: The register that the instruction should be applied to.
-		self.destination: int = random.randint(0, Parameters.NUM_REGISTERS - 1)
+		self.destination: int
+
+		if isForcedMemoryInstruction:
+			self.destination = random.randint(0, Parameters.MEMORY_SIZE - 1)
+		else:
+			self.destination = random.randint(0, Parameters.NUM_REGISTERS - 1)
+
+		# Set a flag to update memory instead of the program's internal registers
+		self.updateMemory: bool
+		if isForcedMemoryInstruction:
+			self.updateMemory = True
+		else:
+			self.updateMemory = False
 
 	def __str__(self) -> str:
 		"""
@@ -35,14 +52,30 @@ class Instruction:
 
 		:return: the instruction casted to a string.
 		"""
-		address: str = "STATE" if self.mode == "INPUT" else "R"
+		address: str
+		if self.mode == "INPUT":
+			address = "STATE"
+		elif self.mode == "REGISTERS":
+			address = "R"
+		elif self.mode == "MEMORY":
+			address = "MEM"
 
-		if self.operation == "COS":
-			return f"R[{self.destination}] = COS({address}[{self.source}])"
-		elif self.operation == "NEGATE":
-			return f"IF (R[{self.destination}] < {address}[{self.source}]) THEN R[{self.destination}] = -R[{self.destination}]"
+		if self.updateMemory:
+			prefix = "MEM"
 		else:
-			return f"R[{self.destination}] = R[{self.destination}] {self.operation} {address}[{self.source}]"
+			prefix = "R"
+		
+		if self.operation == "COS":
+			return f"{prefix}[{self.destination}] = COS({address}[{self.source}])"
+		elif self.operation == "=":
+			return f"{prefix}[{self.destination}] = {address}[{self.source}]"
+		elif self.operation == "NEGATE":
+			return f"IF ({prefix}[{self.destination}] < {address}[{self.source}]) THEN {prefix}[{self.destination}] = -{prefix}[{self.destination}]"
+		elif self.operation == "NONE":
+			return "NO ACTION"
+		else:
+			return f"{prefix}[{self.destination}] = {prefix}[{self.destination}] {self.operation} {address}[{self.source}]"
+
 
 	def __hash__(self) -> int:
 		"""
@@ -53,9 +86,9 @@ class Instruction:
 
 		:return: the instruction's hash
 		"""
-		return hash((self.mode, self.operation, self.source, self.destination))
+		return hash((self.updateMemory, self.mode, self.operation, self.source, self.destination))
 
-	def execute(self, state: np.array, registers: np.array) -> None:
+	def execute(self, memory: List[float], state: np.array, registers: np.array) -> None:
 		"""
 		Updates a program's registers after executing the instruction.
 		If the instruction is a division by zero, the register is set to 0.
@@ -68,25 +101,36 @@ class Instruction:
 			input = state
 		elif self.mode == "REGISTERS":
 			input = registers
+		elif self.mode == "MEMORY":
+			input = memory
+			
+		if self.updateMemory:
+			updatedRegisters = memory 
+		else:
+			updatedRegisters = registers
 			
 		if self.operation == '+': 
-			registers[self.destination] = registers[self.destination] + input[self.source]
+			updatedRegisters[self.destination] = updatedRegisters[self.destination] + input[self.source]
+		elif self.operation == '=':
+			updatedRegisters[self.destination] = input[self.source]
 		elif self.operation == "-":
-			registers[self.destination] = registers[self.destination] - input[self.source]
+			updatedRegisters[self.destination] = updatedRegisters[self.destination] - input[self.source]
 		elif self.operation == "*":
-			registers[self.destination] = registers[self.destination] * input[self.source]
+			updatedRegisters[self.destination] = updatedRegisters[self.destination] * input[self.source]
 		elif self.operation == "/":
 			if input[self.source] != 0:
-				registers[self.destination] = registers[self.destination] / input[self.source]
+				updatedRegisters[self.destination] = updatedRegisters[self.destination] / input[self.source]
 			else:
-				registers[self.destination] = 0
+				updatedRegisters[self.destination] = 0
 		elif self.operation == "COS":
-			registers[self.destination] = math.cos(input[self.source])
+			updatedRegisters[self.destination] = math.cos(input[self.source])
 		elif self.operation == "NEGATE":
-			if registers[self.destination] < input[self.source]:
-				registers[self.destination] = -registers[self.destination]
+			if updatedRegisters[self.destination] < input[self.source]:
+				updatedRegisters[self.destination] = -updatedRegisters[self.destination]
+		elif self.operation == "NONE":
+			pass
 
-		if registers[self.destination] == np.inf:
-			registers[self.destination] = 0#np.finfo(np.float64).min
-		elif registers[self.destination] == np.NINF:
-			registers[self.destination] = 0#np.finfo(np.float64).min
+		if updatedRegisters[self.destination] == np.inf:
+			updatedRegisters[self.destination] = 0#np.finfo(np.float64).min
+		elif updatedRegisters[self.destination] == np.NINF:
+			updatedRegisters[self.destination] = 0#np.finfo(np.float64).min
